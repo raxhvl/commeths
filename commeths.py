@@ -589,14 +589,12 @@ def main():
             )
             md.append(f"| [**{pl}**]({link}) | {cells} | **{sum(counts.values())}** |")
         md.append("")
-    since_q = f" merged:>={since}" if cfg.get("since") else ""
-    since_note = f" since {since}" if cfg.get("since") else ""
     md += [
         '<div align="center">',
         "",
-        f"**[All contributions{since_note} →]({search_url(base + ' is:merged' + since_q)})**",
+        f"**[All contributions →]({search_url(base + ' is:merged')})**",  # all time, ignores since
         "",
-        f"<sub>Updated {today} · counts merged PRs{since_note} only</sub>",
+        f"<sub>Updated {today} · counts merged PRs only</sub>",
         "",
         "</div>",
     ]
