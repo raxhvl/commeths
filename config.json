@@ -1,0 +1,23 @@
+{
+  "recent": 5,
+  "quarters": 4,
+  "sections": {
+    "Spec": {
+      "EELS": "ethereum/execution-specs",
+      "Consensus Specs": "ethereum/consensus-specs",
+      "EIPs": "ethereum/EIPs",
+      "Execution APIs": "ethereum/execution-apis"
+    },
+    "Testing": {
+      "EEST": "ethereum/execution-spec-tests",
+      "Hive": "ethereum/hive"
+    },
+    "Clients": {
+      "Geth": "ethereum/go-ethereum",
+      "Nethermind": "NethermindEth/nethermind",
+      "Besu": "hyperledger/besu",
+      "Erigon": "erigontech/erigon",
+      "Reth": "paradigmxyz/reth"
+    }
+  }
+}
