@@ -3,13 +3,12 @@
   "quarters": 4,
   "sections": {
     "Spec": {
-      "EELS": "ethereum/execution-specs",
       "Consensus Specs": "ethereum/consensus-specs",
       "EIPs": "ethereum/EIPs",
       "Execution APIs": "ethereum/execution-apis"
     },
     "Testing": {
-      "EEST": "ethereum/execution-spec-tests",
+-     "Exectuion Tests": "ethereum/execution-specs",
       "Hive": "ethereum/hive"
     },
     "Clients": {
