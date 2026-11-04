@@ -1,6 +1,7 @@
 {
   "recent": 5,
   "quarters": 4,
+  "since": "2026-10-01",
   "sections": {
     "Spec": {
       "Consensus Specs": "ethereum/consensus-specs",
@@ -8,7 +9,7 @@
       "Execution APIs": "ethereum/execution-apis"
     },
     "Testing": {
--     "Exectuion Tests": "ethereum/execution-specs",
+      "Execution Tests": "ethereum/execution-specs",
       "Hive": "ethereum/hive"
     },
     "Clients": {
@@ -20,3 +21,4 @@
     }
   }
 }
+

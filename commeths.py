@@ -8,6 +8,12 @@ of README.md between the commeths markers. Everything else in README.md is left 
 Env:
   COMMETHS_USER  GitHub username to track (required)
   GITHUB_TOKEN   optional, raises the search rate limit
+
+config.json:
+  sections  {section: {short name: owner/repo}}
+  recent    merged PRs listed per repo (default 3)
+  quarters  quarters shown, current one included (default 4)
+  since     optional "YYYY-MM-DD"; nothing before it is counted, open PRs included
 """
 
 import datetime as dt, json, os, sys, time, urllib.parse, urllib.request
@@ -15,7 +21,7 @@ import datetime as dt, json, os, sys, time, urllib.parse, urllib.request
 ROOT = os.path.dirname(os.path.abspath(__file__))
 ASSETS = os.path.join(ROOT, "assets")
 START, END = "<!-- commeths:start -->", "<!-- commeths:end -->"
-WEEKS = 13
+HOLD = 5  # seconds the filled chain stays up before the animation loops
 
 # ---------- palette (Modern + Corners) ----------
 K = dict(
@@ -36,34 +42,84 @@ SANS = "Geist,'Helvetica Neue',Arial,sans-serif"
 
 
 # ---------- data ----------
-def search(q):
-    """All items for a GitHub issue search (max 1000, GitHub's cap)."""
-    items, page = [], 1
+CAP = 1000  # GitHub search never returns more than 1000 results for one query
+
+
+class TooMany(Exception):
+    pass
+
+
+def fetch(q, page):
     headers = {"Accept": "application/vnd.github+json", "User-Agent": "commeths"}
     if os.environ.get("GITHUB_TOKEN"):
         headers["Authorization"] = "Bearer " + os.environ["GITHUB_TOKEN"]
-    while True:
-        url = "https://api.github.com/search/issues?" + urllib.parse.urlencode(
-            {"q": q, "per_page": 100, "page": page}
-        )
-        for attempt in range(3):
-            try:
-                with urllib.request.urlopen(
-                    urllib.request.Request(url, headers=headers)
-                ) as r:
-                    data = json.load(r)
+    url = "https://api.github.com/search/issues?" + urllib.parse.urlencode(
+        {"q": q, "per_page": 100, "page": page}
+    )
+    for attempt in range(4):
+        try:
+            with urllib.request.urlopen(
+                urllib.request.Request(url, headers=headers)
+            ) as r:
+                data = json.load(r)
+        except urllib.error.HTTPError as e:
+            if e.code in (403, 429) and attempt < 3:  # search rate limit: wait it out
+                time.sleep(61)
+                continue
+            if (
+                e.code == 422
+            ):  # e.g. a repo in config.json that doesn't exist or was renamed
+                sys.exit(f"GitHub rejected the search {q!r}: {e.read().decode()}")
+            raise
+        if (
+            data.get("incomplete_results") and attempt < 3
+        ):  # search timed out server side
+            time.sleep(5)
+            continue
+        if data.get("incomplete_results"):
+            sys.exit(
+                f"GitHub keeps returning incomplete results for {q!r}; refusing to write partial counts."
+            )
+        return data
+
+
+def search(q):
+    """Every item for a GitHub issue search. Fails loudly rather than return a partial list."""
+    for attempt in range(2):
+        first = fetch(q, 1)
+        total = first["total_count"]
+        if total > CAP:
+            raise TooMany(q)
+        seen = {it["id"]: it for it in first["items"]}
+        page = 1
+        while len(seen) < total and page < CAP // 100:
+            page += 1
+            data = fetch(q, page)
+            if not data["items"]:
                 break
-            except urllib.error.HTTPError as e:
-                if (
-                    e.code in (403, 429) and attempt < 2
-                ):  # search rate limit: wait it out
-                    time.sleep(61)
-                    continue
-                raise
-        items += data["items"]
-        if len(items) >= data["total_count"] or not data["items"] or page == 10:
-            return items
-        page += 1
+            seen.update((it["id"], it) for it in data["items"])
+        if (
+            len(seen) == total
+        ):  # results can shift while paging; only trust an exact match
+            return list(seen.values())
+    sys.exit(
+        f"Search {q!r} returned {len(seen)} of {total} results twice; try again later."
+    )
+
+
+def search_merged(base, a, b):
+    """Merged PRs in [a, b], splitting the date range when one query would pass GitHub's cap."""
+    try:
+        return search(f"{base} is:merged merged:{a}..{b}")
+    except TooMany:
+        if a == b:
+            sys.exit(
+                f"More than {CAP} PRs merged on {a}; GitHub search can't list them all."
+            )
+        mid = a + (b - a) // 2
+        return search_merged(base, a, mid) + search_merged(
+            base, mid + dt.timedelta(days=1), b
+        )
 
 
 def quarter_of(day):
@@ -199,18 +255,33 @@ def quote_svg():
     )
 
 
-def chain_svg(qstart, qlabel, cur, weeks, pending, colours):
-    """weeks: list of WEEKS lists of section names (one per merged PR). pending: section names of open PRs."""
+def chain_svg(starts, qlabel, cur, first, weeks, pending, colours):
+    """starts: first day of each block (Monday weeks, clipped to the quarter). cur: block holding today.
+    first: first block inside `since`. weeks: per block, section names (one per merged PR).
+    pending: section names of open PRs."""
+    WEEKS = len(starts)
     B, G, X0, Y0 = 72, 16, 40, 104
     W = X0 + WEEKS * (B + G) - G + 32
-    H = Y0 + B + 112
+    H = Y0 + B + 140
     cx = lambda i: X0 + i * (B + G) + B / 2
     clip = lambda x, y, w, h, c=8: (
         f"M{x},{y} H{x + w - c} L{x + w},{y + c} V{y + h} H{x + c} L{x},{y + h - c} Z"
     )
-    out = []
-    starts = [qstart + dt.timedelta(weeks=i) for i in range(WEEKS)]
-    for m in sorted({d.month for d in starts}, key=lambda m: (m - qstart.month) % 12):
+    out, css = [], []
+    t0 = lambda i: 0.3 + (i - first) * 0.4  # block i starts fading in
+    filled = max(  # when the last tx lands
+        t0(i) + 0.45 + 0.07 * max(min(len(weeks[i]), 12) - 1, 0) + 0.2
+        for i in range(first, cur + 1)
+    )
+    CYC = round(filled + HOLD + 0.8, 2)  # then hold for reading, fade out, loop
+    pct = lambda t: f"{t / CYC * 100:.2f}"
+    pop = lambda name, t, fade: css.append(
+        f"@keyframes {name}{{0%,{pct(t)}%{{opacity:0}}{pct(t + fade)}%,{pct(CYC - 0.8)}%{{opacity:1}}100%{{opacity:0}}}}"
+    )
+    anim = lambda name: f'style="animation:{name} {CYC}s ease-out infinite"'
+    for m in sorted(
+        {d.month for d in starts}, key=lambda m: (m - starts[0].month) % 12
+    ):
         idx = [i for i, d in enumerate(starts) if d.month == m]
         a, b = X0 + idx[0] * (B + G), X0 + idx[-1] * (B + G) + B
         out.append(
@@ -219,23 +290,28 @@ def chain_svg(qstart, qlabel, cur, weeks, pending, colours):
         )
     for i, wk in enumerate(starts):
         x = X0 + i * (B + G)
-        lab = f'<text class="lb" x="{cx(i)}" y="{Y0 + B + 22}" opacity="{1 if i <= cur else 0.5}">{wk.strftime("%m.%d")}</text>'
+        live = first <= i <= cur
+        lab = f'<text class="lb" x="{cx(i)}" y="{Y0 + B + 22}" opacity="{1 if live else 0.5}">{wk.strftime("%m.%d")}</text>'
+        link = ""
         if i > 0:
-            dash = "" if i <= cur else 'stroke-dasharray="2 3"'
+            dash = "" if live and i > first else 'stroke-dasharray="2 3"'
+            link = f'<line x1="{x - G}" y1="{Y0 + B / 2}" x2="{x}" y2="{Y0 + B / 2}" stroke="{K["cline"] if live else K["line"]}" stroke-width="1.5" {dash}/>'
+        if not live:  # upcoming, or before `since`
             out.append(
-                f'<line x1="{x - G}" y1="{Y0 + B / 2}" x2="{x}" y2="{Y0 + B / 2}" stroke="{K["cline"] if i <= cur else K["line"]}" stroke-width="1.5" {dash}/>'
-            )
-        if i > cur:
-            out.append(
-                f'<path d="{clip(x + 0.5, Y0 + 0.5, B - 1, B - 1)}" fill="none" stroke="{K["line"]}" stroke-dasharray="2 3"/>{lab}'
+                f'{link}<path d="{clip(x + 0.5, Y0 + 0.5, B - 1, B - 1)}" fill="none" stroke="{K["line"]}" stroke-dasharray="2 3"/>{lab}'
             )
             continue
         prs = weeks[i]
-        out.append(
-            f'<path d="{clip(x + 0.5, Y0 + 0.5, B - 1, B - 1)}" fill="{K["plate"]}" stroke="{K["acc"] if i == cur else K["cline"]}"/>'
+        pop(f"b{i}", t0(i), 0.5)
+        focus = (  # the slot being proposed: dashed accent outline that breathes, plus its tag
+            f'<path class="cur" d="{clip(x + 0.5, Y0 + 0.5, B - 1, B - 1)}" fill="none"/>'
+            f'<rect x="{cx(i) - 38}" y="{Y0 + B + 34}" width="6" height="9" fill="{K["acc"]}"/><text class="tag" x="{cx(i) - 28}" y="{Y0 + B + 43}">PROPOSING</text>'
+            if i == cur
+            else ""
         )
         out.append(
-            f'<text class="n" x="{cx(i)}" y="{Y0 + 28}" style="fill:{K["ink"] if prs else K["line"]}">{len(prs):02d}</text>'
+            f'<g {anim(f"b{i}")}>{link}<path d="{clip(x + 0.5, Y0 + 0.5, B - 1, B - 1)}" fill="{K["plate"]}" stroke="{K["cline"]}"/>{focus}'
+            f'<text class="n" x="{cx(i)}" y="{Y0 + 28}" style="fill:{K["ink"] if prs else K["line"]}">{len(prs):02d}</text></g>'
         )
         shown = prs[:12]  # the count above stays exact; the block holds at most 3 rows
         Sz, P, cols = 9, 3, 4
@@ -245,37 +321,37 @@ def chain_svg(qstart, qlabel, cur, weeks, pending, colours):
             nr = min(cols, len(shown) - r * cols)
             px = cx(i) - (nr * Sz + (nr - 1) * P) / 2 + c * (Sz + P)
             py = Y0 + B - 11 - Sz - (rows - 1 - r) * (Sz + P)
+            pop(f"t{i}_{j}", t0(i) + 0.45 + j * 0.07, 0.2)
             out.append(
-                f'<rect x="{px:.1f}" y="{py:.1f}" width="{Sz}" height="{Sz}" fill="{colours[s]}"/>'
+                f'<rect x="{px:.1f}" y="{py:.1f}" width="{Sz}" height="{Sz}" fill="{colours[s]}" {anim(f"t{i}_{j}")}/>'
             )
         out.append(lab)
-        if i == cur:
-            out.append(
-                f'<rect x="{cx(i) - 38}" y="{Y0 + B + 34}" width="6" height="9" fill="{K["acc"]}"/><text class="tag" x="{cx(i) - 28}" y="{Y0 + B + 43}">PROPOSING</text>'
-            )
     if pending:
         label = f"MEMPOOL (OPEN PRS) · {len(pending):02d}"
         shown = pending[:16]
         Sz, P = 9, 4
         lw = len(label) * 7.7 + 22
         tw = lw + len(shown) * (Sz + P) + 10
-        tx = min(X0 + (cur + 1) * (B + G) - 6, W - 32 - tw)
-        ty = Y0 + B + 28
+        xb = X0 + cur * (B + G)
+        tx = min(xb - G, W - 32 - tw)  # under the proposing block
+        ty = Y0 + B + 58
+        # a faint line with pulses flowing from the mempool up the gap into the proposing block
+        flow = f"M{xb - G / 2},{ty} V{Y0 + B - 14} H{xb}"
         out.append(
+            f"<g {anim(f'b{cur}')}>"
+            f'<path d="{flow}" fill="none" stroke="{K["line"]}" stroke-width="1.5"/>'
+            f'<path class="flow" d="{flow}" fill="none" stroke="{K["acc"]}" stroke-width="1.5"/>'
             f'<rect x="{tx + 0.5}" y="{ty + 0.5}" width="{tw - 1}" height="22" fill="none" stroke="{K["cline"]}" stroke-dasharray="3 3"/>'
             f'<text x="{tx + 12}" y="{ty + 15}" style="fill:{K["muted"]};letter-spacing:.1em">{label}</text>'
             + "".join(
                 f'<rect x="{tx + lw + j * (Sz + P) + 0.5}" y="{ty + 7.5}" width="{Sz - 1}" height="{Sz - 1}" fill="none" stroke="{colours[s]}" stroke-width="1.5"/>'
                 for j, s in enumerate(shown)
             )
+            + "</g>"
         )
     ly, lx, leg = H - 22, X0, []
-    for name, col in list(colours.items()) + [("upcoming", None)]:
-        sw = (
-            f'<rect x="{lx}" y="{ly - 9}" width="9" height="9" fill="{col}"/>'
-            if col
-            else f'<rect x="{lx + 0.5}" y="{ly - 8.5}" width="8" height="8" fill="none" stroke="{K["cline"]}" stroke-dasharray="2 2"/>'
-        )
+    for name, col in colours.items():
+        sw = f'<rect x="{lx}" y="{ly - 9}" width="9" height="9" fill="{col}"/>'
         leg.append(
             sw + f'<text class="lg" x="{lx + 16}" y="{ly}">{esc(name.upper())}</text>'
         )
@@ -294,6 +370,12 @@ def chain_svg(qstart, qlabel, cur, weeks, pending, colours):
         f".h{{font-size:30px;font-weight:600;fill:{K['ink']};letter-spacing:-.01em}}"
         f".sub{{font-size:12px;fill:{K['body']};letter-spacing:.06em}} .mo{{letter-spacing:.1em}}"
         f".lb{{text-anchor:middle}} .n{{font-size:20px;font-weight:500;text-anchor:middle}} .tag{{fill:{K['acc']};letter-spacing:.1em}} .lg{{letter-spacing:.08em}}"
+        + f".cur{{stroke:{K['acc']};stroke-width:1.5;stroke-dasharray:5 4;animation:pulse 1.6s ease-in-out infinite}}"
+        + "@keyframes pulse{50%{stroke-opacity:.25}}"
+        + ".flow{stroke-dasharray:4 20;stroke-opacity:.7;animation:flow 1.2s linear infinite}"
+        + "@keyframes flow{from{stroke-dashoffset:24}to{stroke-dashoffset:0}}"
+        + "".join(css)
+        + "@media (prefers-reduced-motion:reduce){*{animation:none!important}}"
     )
     return svg(
         W,
@@ -371,49 +453,80 @@ def main():
     repo_q = " ".join(f"repo:{r}" for r in all_repos)
     base = f"is:pr author:{user} {repo_q}"
 
-    today = dt.date.today()
+    def sec_of(it):
+        repo = repo_of(it).lower()
+        if (
+            repo not in section_of
+        ):  # GitHub answered with a name config.json doesn't use
+            sys.exit(
+                f"{repo_of(it)} isn't in config.json (renamed or moved?). Update it and rerun."
+            )
+        return section_of[repo]
+
+    today = dt.datetime.now(dt.timezone.utc).date()  # GitHub's merged_at is UTC too
     qs, qe, qlabel = quarter_of(today)
-    merged = search(f"{base} is:merged merged:{qs}..{qe}")
-    pending = search(f"{base} is:open")
+    since = dt.date.fromisoformat(cfg["since"]) if cfg.get("since") else dt.date.min
+    if since > today:
+        sys.exit(f"since ({since}) is in the future.")
+    a = max(qs, since)  # counting starts here this quarter
+    merged = search_merged(base, a, qe) if a <= qe else []
+    pending = search(
+        f"{base} is:open" + (f" created:>={since}" if cfg.get("since") else "")
+    )
     for it in merged:
         it["_merged"] = it["pull_request"]["merged_at"]
     merged.sort(key=lambda it: it["_merged"], reverse=True)
+    pending.sort(key=lambda it: it["created_at"], reverse=True)
 
-    cur = min((today - qs).days // 7, WEEKS - 1)
-    weeks = [[] for _ in range(WEEKS)]
+    # one block per calendar week (Mon-Sun), clipped to the quarter, so the last block always holds today
+    monday = qs - dt.timedelta(days=qs.weekday())
+    starts = [qs] + [
+        monday + dt.timedelta(weeks=k) for k in range(1, (qe - monday).days // 7 + 1)
+    ]
+    block = lambda day: max(i for i, d in enumerate(starts) if d <= day)
+    cur, first = block(today), block(a)
+    weeks = [[] for _ in starts]
     for it in merged:
-        w = min((dt.date.fromisoformat(it["_merged"][:10]) - qs).days // 7, WEEKS - 1)
-        weeks[w].append(section_of[repo_of(it).lower()])
+        weeks[block(dt.date.fromisoformat(it["_merged"][:10]))].append(sec_of(it))
     order = list(sections)
     for w in weeks:
         w.sort(key=order.index)
-    pend_secs = sorted(
-        (section_of[repo_of(it).lower()] for it in pending), key=order.index
-    )
+    pend_secs = sorted(map(sec_of, pending), key=order.index)
 
     past = []
     s = qs
     for _ in range(quarters - 1):
         ps, pe, pl = prev_quarter(s)
-        items = search(f"{base} is:merged merged:{ps}..{pe}")
-        counts = {sec: 0 for sec in sections}
-        for it in items:
-            counts[section_of[repo_of(it).lower()]] += 1
-        past.append((pl, ps, pe, counts))
         s = ps
+        if pe < since:
+            break
+        clipped, ps = since > ps, max(ps, since)
+        counts = {sec: 0 for sec in sections}
+        for it in search_merged(base, ps, pe):
+            counts[sec_of(it)] += 1
+        past.append(
+            (
+                pl + (f" <sub>from {short_date(str(ps))}</sub>" if clipped else ""),
+                ps,
+                pe,
+                counts,
+            )
+        )
+    if not any(sum(c.values()) for *_, c in past):
+        past = []  # nothing merged before this quarter (within since): skip the table
 
     os.makedirs(ASSETS, exist_ok=True)
     write = lambda name, text: open(os.path.join(ASSETS, name), "w").write(text)
     write("quote.svg", quote_svg())
-    write("chain.svg", chain_svg(qs, qlabel, cur, weeks, pend_secs, colours))
+    write("chain.svg", chain_svg(starts, qlabel, cur, first, weeks, pend_secs, colours))
 
     md = [
         f'<img src="assets/chain.svg" alt="{qlabel}: {len(merged)} merged PRs, one block per week" width="100%">',
         "",
     ]
     for n, (sec, repos) in enumerate(sections.items(), 1):
-        sec_merged = [it for it in merged if section_of[repo_of(it).lower()] == sec]
-        sec_open = [it for it in pending if section_of[repo_of(it).lower()] == sec]
+        sec_merged = [it for it in merged if sec_of(it) == sec]
+        sec_open = [it for it in pending if sec_of(it) == sec]
         if not sec_merged and not sec_open:
             continue
         slug = "h-" + "".join(ch for ch in sec.lower() if ch.isalnum()) + ".svg"
@@ -436,7 +549,7 @@ def main():
             ]
             if len(rows) > recent:
                 more = search_url(
-                    f"is:pr is:merged author:{user} repo:{repo} merged:{qs}..{qe}"
+                    f"is:pr is:merged author:{user} repo:{repo} merged:{a}..{qe}"
                 )
                 lines.append(
                     f"> <sub>[+{len(rows) - recent} more this quarter →]({more})</sub>"
@@ -467,12 +580,14 @@ def main():
             )
             md.append(f"| [**{pl}**]({link}) | {cells} | **{sum(counts.values())}** |")
         md.append("")
+    since_q = f" merged:>={since}" if cfg.get("since") else ""
+    since_note = f" since {since}" if cfg.get("since") else ""
     md += [
         '<div align="center">',
         "",
-        f"**[All past contributions →]({search_url(base + ' is:merged')})**",
+        f"**[All contributions{since_note} →]({search_url(base + ' is:merged' + since_q)})**",
         "",
-        f"<sub>Updated {today} · counts merged PRs only · tracking @{user}</sub>",
+        f"<sub>Updated {today} · counts merged PRs{since_note} only</sub>",
         "",
         "</div>",
     ]
