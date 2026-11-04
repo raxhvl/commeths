@@ -5,9 +5,9 @@
 </div>
 
 <!-- commeths:start -->
-<img src="assets/chain.svg" alt="2026 Q4: 4 merged PRs, one block per week" width="100%">
+<img src="assets/chain.svg?v=adc79eae" alt="2026 Q4: 4 merged PRs, one block per week" width="100%">
 
-<img src="assets/h-spec.svg" alt="Spec · 2 merged" width="100%">
+<img src="assets/h-spec.svg?v=d5e09d75" alt="Spec · 2 merged" width="100%">
 
 <img src="https://github.com/ethereum.png" width="16"> **[EIPs](https://github.com/ethereum/EIPs)** · 2
 > [Update EIP-8141: Transaction nonce check boundary](https://github.com/ethereum/EIPs/pull/12603) <sub>Nov 1</sub><br>
@@ -17,7 +17,7 @@
 
 > ○ [✨ feat(engine): Simplify inclusion list type](https://github.com/ethereum/execution-apis/pull/956) <sub>Execution APIs · open 12d</sub>
 
-<img src="assets/h-testing.svg" alt="Testing · 2 merged" width="100%">
+<img src="assets/h-testing.svg?v=a737503f" alt="Testing · 2 merged" width="100%">
 
 <img src="https://github.com/ethereum.png" width="16"> **[Execution Tests](https://github.com/ethereum/execution-specs)** · 2
 > [🧹 chore(tests): Remove duplicate frame tx coverage](https://github.com/ethereum/execution-specs/pull/3946) <sub>Nov 3</sub><br>
@@ -30,9 +30,9 @@
 
 <div align="center">
 
-**[All contributions since 2026-10-01 →](https://github.com/search?q=is%3Apr+author%3Araxhvl+repo%3Aethereum%2Fconsensus-specs+repo%3Aethereum%2FEIPs+repo%3Aethereum%2Fexecution-apis+repo%3Aethereum%2Fexecution-specs+repo%3Aethereum%2Fhive+repo%3Aethereum%2Fgo-ethereum+repo%3ANethermindEth%2Fnethermind+repo%3Ahyperledger%2Fbesu+repo%3Aerigontech%2Ferigon+repo%3Aparadigmxyz%2Freth+is%3Amerged+merged%3A%3E%3D2026-10-01&type=pullrequests)**
+**[All contributions →](https://github.com/search?q=is%3Apr+author%3Araxhvl+repo%3Aethereum%2Fconsensus-specs+repo%3Aethereum%2FEIPs+repo%3Aethereum%2Fexecution-apis+repo%3Aethereum%2Fexecution-specs+repo%3Aethereum%2Fhive+repo%3Aethereum%2Fgo-ethereum+repo%3ANethermindEth%2Fnethermind+repo%3Ahyperledger%2Fbesu+repo%3Aerigontech%2Ferigon+repo%3Aparadigmxyz%2Freth+is%3Amerged&type=pullrequests)**
 
-<sub>Updated 2026-11-04 · counts merged PRs since 2026-10-01 only</sub>
+<sub>Updated 2026-11-04 · counts merged PRs only</sub>
 
 </div>
 <!-- commeths:end -->
