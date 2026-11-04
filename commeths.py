@@ -16,7 +16,7 @@ config.json:
   since     optional "YYYY-MM-DD"; nothing before it is counted, open PRs included
 """
 
-import datetime as dt, json, os, sys, time, urllib.parse, urllib.request
+import datetime as dt, hashlib, json, os, sys, time, urllib.parse, urllib.request
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 ASSETS = os.path.join(ROOT, "assets")
@@ -516,12 +516,19 @@ def main():
         past = []  # nothing merged before this quarter (within since): skip the table
 
     os.makedirs(ASSETS, exist_ok=True)
-    write = lambda name, text: open(os.path.join(ASSETS, name), "w").write(text)
+
+    def write(name, text):
+        """Write an asset; return its README src with a content hash so browsers refetch it when it changes."""
+        open(os.path.join(ASSETS, name), "w").write(text)
+        return f"assets/{name}?v={hashlib.sha1(text.encode()).hexdigest()[:8]}"
+
     write("quote.svg", quote_svg())
-    write("chain.svg", chain_svg(starts, qlabel, cur, first, weeks, pend_secs, colours))
+    chain = write(
+        "chain.svg", chain_svg(starts, qlabel, cur, first, weeks, pend_secs, colours)
+    )
 
     md = [
-        f'<img src="assets/chain.svg" alt="{qlabel}: {len(merged)} merged PRs, one block per week" width="100%">',
+        f'<img src="{chain}" alt="{qlabel}: {len(merged)} merged PRs, one block per week" width="100%">',
         "",
     ]
     for n, (sec, repos) in enumerate(sections.items(), 1):
@@ -530,9 +537,9 @@ def main():
         if not sec_merged and not sec_open:
             continue
         slug = "h-" + "".join(ch for ch in sec.lower() if ch.isalnum()) + ".svg"
-        write(slug, heading_svg(sec, len(sec_merged), n, colours[sec]))
+        src = write(slug, heading_svg(sec, len(sec_merged), n, colours[sec]))
         md += [
-            f'<img src="assets/{slug}" alt="{sec} · {len(sec_merged)} merged" width="100%">',
+            f'<img src="{src}" alt="{sec} · {len(sec_merged)} merged" width="100%">',
             "",
         ]
         for name, repo in repos.items():
@@ -566,9 +573,11 @@ def main():
             md += ["<br>\n".join(lines), ""]
 
     if past:
-        write("h-past.svg", heading_svg("Past quarters", None, len(sections) + 1, None))
+        src = write(
+            "h-past.svg", heading_svg("Past quarters", None, len(sections) + 1, None)
+        )
         md += [
-            '<img src="assets/h-past.svg" alt="Past quarters" width="100%">',
+            f'<img src="{src}" alt="Past quarters" width="100%">',
             "",
             "| Quarter | " + " | ".join(sections) + " | Total |",
             "|---|" + "--:|" * (len(sections) + 1),
