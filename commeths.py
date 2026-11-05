@@ -255,7 +255,7 @@ def quote_svg():
     )
 
 
-def chain_svg(starts, qlabel, cur, first, weeks, pending, colours):
+def chain_svg(starts, qlabel, cur, first, weeks, pending, colours, span):
     """starts: first day of each block (Monday weeks, clipped to the quarter). cur: block holding today.
     first: first block inside `since`. weeks: per block, section names (one per merged PR).
     pending: section names of open PRs."""
@@ -376,30 +376,25 @@ def chain_svg(starts, qlabel, cur, first, weeks, pending, colours):
         + "@keyframes flow{from{stroke-dashoffset:24}to{stroke-dashoffset:0}}"
         + "".join(css)
         + "@media (prefers-reduced-motion:reduce){*{animation:none!important}}"
+        + f".qh{{font-size:40px;font-weight:600;fill:{K['ink']};letter-spacing:.01em}} .qm{{letter-spacing:.12em}}"
+        + f".qr{{font-size:14px;fill:{K['acc']};letter-spacing:.12em;text-anchor:end}}"
     )
+    T = 96  # quarter title band on top, the chain below it
+    body = (
+        f'<text class="qm" x="{X0}" y="40">&gt; THIS QUARTER</text>'
+        + fringe(X0, 82, esc(qlabel), "qh")
+        + f'<text class="qr" x="{W - 32}" y="80">{span}</text>'
+        + f'<line stroke="{K["line"]}" x1="{X0}" y1="{T + 4}" x2="{W - 32}" y2="{T + 4}"/>'
+        + f'<g transform="translate(0,{T})">{body}</g>'
+    )
+    H += T
     return svg(
         W,
         H,
-        f"{qlabel}: {total} merged PRs, slot {cur + 1} of {WEEKS}, {len(pending)} open",
+        f"{qlabel}, {span.title()}: {total} merged PRs, slot {cur + 1} of {WEEKS}, {len(pending)} open",
         style,
         body,
     )
-
-
-def quarter_svg(qlabel, start, end):
-    """The quarter title under the hero: which quarter the numbers below are for."""
-    W, H, X0 = 1100, 96, 24
-    span = f"{start:%b %d} — {end:%b %d}".upper()
-    body = (
-        f'<text class="m" x="{X0}" y="34">&gt; THIS QUARTER</text>'
-        + fringe(X0, 74, esc(qlabel), "h")
-        + f'<text class="r" x="{W - 24}" y="72">{span}</text>'
-    )
-    style = (
-        f".h{{font:600 40px {MONO};fill:{K['ink']};letter-spacing:.01em}} .m{{font:12px {MONO};fill:{K['muted']};letter-spacing:.12em}}"
-        f".r{{font:14px {MONO};fill:{K['acc']};letter-spacing:.12em;text-anchor:end}}"
-    )
-    return svg(W, H, f"{qlabel}, {span.title()}", style, body)
 
 
 def heading_svg(label, count, index, colour):
@@ -540,13 +535,20 @@ def main():
 
     write("quote.svg", quote_svg())
     chain = write(
-        "chain.svg", chain_svg(starts, qlabel, cur, first, weeks, pend_secs, colours)
+        "chain.svg",
+        chain_svg(
+            starts,
+            qlabel,
+            cur,
+            first,
+            weeks,
+            pend_secs,
+            colours,
+            f"{a:%b %d} — {qe:%b %d}".upper(),
+        ),
     )
 
-    qtitle = write("quarter.svg", quarter_svg(qlabel, a, qe))
     md = [
-        f'<img src="{qtitle}" alt="{qlabel}" width="100%">',
-        "",
         f'<img src="{chain}" alt="{qlabel}: {len(merged)} merged PRs, one block per week" width="100%">',
         "",
     ]
