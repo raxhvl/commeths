@@ -5,9 +5,7 @@
 </div>
 
 <!-- commeths:start -->
-<img src="assets/quarter.svg?v=f9051fca" alt="2026 Q4" width="100%">
-
-<img src="assets/chain.svg?v=d86d56c4" alt="2026 Q4: 5 merged PRs, one block per week" width="100%">
+<img src="assets/chain.svg?v=44bff5cf" alt="2026 Q4: 5 merged PRs, one block per week" width="100%">
 
 <img src="assets/h-spec.svg?v=d5e09d75" alt="Spec · 2 merged" width="100%">
 
