@@ -360,7 +360,7 @@ def chain_svg(starts, qlabel, cur, first, weeks, pending, colours):
     title = f"{total} merged PRs"
     body = (
         fringe(X0, 48, title, "h")
-        + f'<text class="sub" x="{X0 + len(title) * 18 + 28}" y="47">{qlabel.replace(" ", ".")} // SLOT {cur + 1:02d}/{WEEKS}</text>'
+        + f'<text class="sub" x="{X0 + len(title) * 18 + 28}" y="47">SLOT {cur + 1:02d}/{WEEKS}</text>'
         + "".join(out)
         + f'<line stroke="{K["line"]}" x1="{X0}" y1="{ly - 26}" x2="{W - 32}" y2="{ly - 26}"/>'
         + "".join(leg)
@@ -384,6 +384,22 @@ def chain_svg(starts, qlabel, cur, first, weeks, pending, colours):
         style,
         body,
     )
+
+
+def quarter_svg(qlabel, start, end):
+    """The quarter title under the hero: which quarter the numbers below are for."""
+    W, H, X0 = 1100, 96, 24
+    span = f"{start:%b %d} — {end:%b %d}".upper()
+    body = (
+        f'<text class="m" x="{X0}" y="34">&gt; THIS QUARTER</text>'
+        + fringe(X0, 74, esc(qlabel), "h")
+        + f'<text class="r" x="{W - 24}" y="72">{span}</text>'
+    )
+    style = (
+        f".h{{font:600 40px {MONO};fill:{K['ink']};letter-spacing:.01em}} .m{{font:12px {MONO};fill:{K['muted']};letter-spacing:.12em}}"
+        f".r{{font:14px {MONO};fill:{K['acc']};letter-spacing:.12em;text-anchor:end}}"
+    )
+    return svg(W, H, f"{qlabel}, {span.title()}", style, body)
 
 
 def heading_svg(label, count, index, colour):
@@ -527,7 +543,10 @@ def main():
         "chain.svg", chain_svg(starts, qlabel, cur, first, weeks, pend_secs, colours)
     )
 
+    qtitle = write("quarter.svg", quarter_svg(qlabel, a, qe))
     md = [
+        f'<img src="{qtitle}" alt="{qlabel}" width="100%">',
+        "",
         f'<img src="{chain}" alt="{qlabel}: {len(merged)} merged PRs, one block per week" width="100%">',
         "",
     ]
