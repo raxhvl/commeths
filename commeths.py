@@ -16,12 +16,14 @@ config.json:
   since     optional "YYYY-MM-DD"; nothing before it is counted, open PRs included
 """
 
-import datetime as dt, hashlib, json, os, sys, time, urllib.parse, urllib.request
+import datetime as dt, hashlib, json, random, os, sys, time, urllib.parse, urllib.request
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 ASSETS = os.path.join(ROOT, "assets")
 START, END = "<!-- commeths:start -->", "<!-- commeths:end -->"
-HOLD = 5  # seconds the filled chain stays up before the animation loops
+SHOW = 5  # weeks in view: three before this week, this week, and the next one
+READ = 6  # seconds the chain holds on this week before it loops
+EASE = "cubic-bezier(.65,0,.35,1)"  # ease-in-out cubic, for the roll to this week
 
 # ---------- palette (Modern + Corners) ----------
 K = dict(
@@ -165,14 +167,6 @@ def frame(W, H, body):
     )
 
 
-def fringe(x, y, txt, cls, extra=""):
-    return (
-        f'<g aria-hidden="true"><text class="{cls}" x="{x - 2}" y="{y}" style="fill:{K["cyan"]}" {extra}>{txt}</text>'
-        f'<text class="{cls}" x="{x + 2}" y="{y}" style="fill:{K["mag"]}" {extra}>{txt}</text></g>'
-        f'<text class="{cls}" x="{x}" y="{y}" {extra}>{txt}</text>'
-    )
-
-
 def svg(W, H, label, style, body):
     return (
         f'<svg xmlns="http://www.w3.org/2000/svg" width="{W}" height="{H}" viewBox="0 0 {W} {H}" role="img" aria-label="{esc(label)}">'
@@ -180,8 +174,11 @@ def svg(W, H, label, style, body):
     )
 
 
-def eth_cutout(x, y, size, fill):
-    """Filled square with the line-art Ethereum glyph cut out of it."""
+def eth_cutout(x, y, size, fill, cyc):
+    """Filled square with the line-art Ethereum glyph cut out of it, plus a short glitch burst
+    once per quote cycle, lined up with the commits/commeths swap: the square splits into
+    cyan and magenta ghosts, tears into sideways-shifted slices, flickers to a wireframe,
+    throws off a few noise specks, then settles. Returns (markup, css)."""
     h = size * 0.84
     sc = h / 1213
     gx = x + size / 2 - 400 * sc
@@ -194,19 +191,127 @@ def eth_cutout(x, y, size, fill):
         [(8, 684), (400, 910), (792, 684), (400, 1205), (8, 684)],
         [(400, 910), (400, 1205)],
     ]
-    cut = "".join(
-        f'<polyline points="{P(l)}" fill="none" stroke="#000" stroke-width="1.25" stroke-linejoin="round"/>'
+    glyph = lambda colour: "".join(
+        f'<polyline points="{P(l)}" fill="none" stroke="{colour}" stroke-width="1.25" stroke-linejoin="round"/>'
         for l in lines
     )
-    return (
-        f'<mask id="ethcut" maskUnits="userSpaceOnUse" x="{x}" y="{y}" width="{size}" height="{size}">'
-        f'<rect x="{x}" y="{y}" width="{size}" height="{size}" fill="#fff"/>{cut}</mask>'
-        f'<rect x="{x}" y="{y}" width="{size}" height="{size}" fill="{fill}" mask="url(#ethcut)"/>'
+    sq = lambda colour, cls="": (
+        f'<rect class="{cls}" x="{x}" y="{y}" width="{size}" height="{size}" fill="{colour}" mask="url(#ethcut)"/>'
     )
+    bands = 5
+    bh = size / bands
+    rng = random.Random(7)  # fixed seed: the glitch looks the same every run
+    out = [
+        f'<mask id="ethcut" maskUnits="userSpaceOnUse" x="{x - 12}" y="{y - 12}" width="{size + 24}" height="{size + 24}">'
+        f'<rect x="{x - 12}" y="{y - 12}" width="{size + 24}" height="{size + 24}" fill="#fff"/>{glyph("#000")}</mask>'
+    ]
+    out += [
+        f'<clipPath id="eb{k}"><rect x="{x - 12}" y="{y + k * bh:.2f}" width="{size + 24}" height="{bh:.2f}"/></clipPath>'
+        for k in range(bands)
+    ]
+    wire = lambda colour, cls: (
+        f'<g class="{cls}"><rect x="{x + 0.5}" y="{y + 0.5}" width="{size - 1}" height="{size - 1}" fill="none" stroke="{colour}"/>{glyph(colour)}</g>'
+    )
+    out.append(
+        wire(K["cyan"], "eg ec") + wire(K["mag"], "eg em")
+    )  # colour-split outlines, behind
+    out.append(
+        '<g class="ef">'
+        + "".join(
+            f'<g clip-path="url(#eb{k})">{sq(fill, f"es{k}")}</g>' for k in range(bands)
+        )
+        + "</g>"
+    )
+    out.append(wire(fill, "eg eo"))  # the wireframe it flickers to
+    specks = []
+    for k in range(7):
+        sx_ = x - 14 + rng.random() * (size + 28)
+        sy_ = y - 10 + rng.random() * (size + 20)
+        w = rng.choice((1, 2, 2, 3, 5))
+        col = rng.choice((K["cyan"], K["mag"], fill, K["ink"]))
+        specks.append(
+            f'<rect class="eg en{k}" x="{sx_:.1f}" y="{sy_:.1f}" width="{w}" height="1.5" fill="{col}"/>'
+        )
+    out += specks
+
+    # keyframes, in % of the quote's cycle; the word swaps at 45%
+    kf = lambda name, frames: (
+        f"@keyframes {name}{{" + "".join(f"{p}{{{v}}}" for p, v in frames) + "}"
+    )
+    css = [
+        f".eg{{opacity:0}} .ec,.em,.eo,.ef,{','.join(f'.es{k}' for k in range(bands))},{','.join(f'.en{k}' for k in range(7))}{{animation-duration:{cyc}s;animation-iteration-count:infinite;animation-timing-function:steps(1,end)}}",
+        ".ec{animation-name:ec} .em{animation-name:em} .eo{animation-name:eo} .ef{animation-name:ef}",
+        kf(
+            "ec",
+            [
+                ("0%,43%", "opacity:0"),
+                ("44%", "opacity:.9;transform:translate(-4px,0)"),
+                ("46%", "opacity:.9;transform:translate(-2px,1px)"),
+                ("48%", "opacity:.8;transform:translate(-5px,0)"),
+                ("50%", "opacity:.7;transform:translate(-1px,0)"),
+                ("53%", "opacity:.5;transform:translate(-2px,0)"),
+                ("55%,100%", "opacity:0;transform:none"),
+            ],
+        ),
+        kf(
+            "em",
+            [
+                ("0%,43%", "opacity:0"),
+                ("44%", "opacity:.9;transform:translate(4px,0)"),
+                ("46%", "opacity:.9;transform:translate(3px,-1px)"),
+                ("48%", "opacity:.8;transform:translate(5px,0)"),
+                ("50%", "opacity:.7;transform:translate(2px,0)"),
+                ("53%", "opacity:.5;transform:translate(1px,0)"),
+                ("55%,100%", "opacity:0;transform:none"),
+            ],
+        ),
+        kf(
+            "ef",
+            [
+                ("0%,46%", "opacity:1"),
+                ("47%,48%", "opacity:0"),
+                ("49%,50%", "opacity:1"),
+                ("51%", "opacity:0"),
+                ("52%,100%", "opacity:1"),
+            ],
+        ),
+        kf(
+            "eo",
+            [
+                ("0%,46%", "opacity:0"),
+                ("47%,48%", "opacity:1"),
+                ("49%,50%", "opacity:0"),
+                ("51%", "opacity:1"),
+                ("52%,100%", "opacity:0"),
+            ],
+        ),
+    ]
+    for k in range(bands):  # each slice tears sideways on its own few frames
+        steps = [("0%,43%", "transform:none")]
+        for p in (44, 45, 47, 49, 51):
+            d = rng.choice((0, 0, -7, -4, -2, 2, 4, 8))
+            steps.append((f"{p}%", f"transform:translateX({d}px)"))
+        steps.append(("53%,100%", "transform:none"))
+        css += [f".es{k}{{animation-name:es{k}}}", kf(f"es{k}", steps)]
+    for k in range(7):  # specks blink on and off through the burst
+        on = sorted(rng.sample(range(44, 56), 3))
+        frames = [("0%", "opacity:0")]
+        for p in on:
+            frames += [(f"{p}%", "opacity:1"), (f"{p + 1}%", "opacity:0")]
+        frames.append(("100%", "opacity:0"))
+        css += [f".en{k}{{animation-name:en{k}}}", kf(f"en{k}", frames)]
+    css.append(
+        "@media (prefers-reduced-motion:reduce){.ec,.em,.eo,.ef,"
+        + ",".join(f".es{k}" for k in range(bands))
+        + ","
+        + ",".join(f".en{k}" for k in range(7))
+        + "{animation:none!important}}"
+    )
+    return "".join(out), "".join(css)
 
 
-def quote_svg():
-    W, H, X0, Y1, Y2, CW, cyc = 760, 230, 52, 84, 146, 24.0, 4.0
+def quote_parts():
+    W, X0, Y1, Y2, CW, cyc = 760, 52, 84, 146, 24.0, 4.0
     style = f""".l{{font:400 27px {SANS};fill:{K["body"]};letter-spacing:-.01em}} .w{{font:600 40px {MONO};fill:{K["ink"]}}}
 .m{{font:11px {MONO};fill:{K["muted"]};letter-spacing:.12em}} .a{{font:12px {MONO};fill:{K["acc"]};letter-spacing:.12em;text-anchor:end}}
 .A{{animation:A {cyc}s infinite steps(1,end)}} .B{{animation:B {cyc}s infinite steps(1,end)}}
@@ -228,10 +333,11 @@ def quote_svg():
         )
 
     ox, oy = W - 150, 40
+    eth, eth_css = eth_cutout(ox + 24, oy + 24, 52, K["acc"], cyc)
     obj = (
         f'<rect x="{ox}" y="{oy}" width="100" height="100" fill="none" stroke="{K["line"]}"/>'
         f'<rect x="{ox + 16}" y="{oy + 16}" width="68" height="68" fill="none" stroke="{K["cline"]}"/>'
-        + eth_cutout(ox + 24, oy + 24, 52, K["acc"])
+        + eth
         + "".join(
             f'<rect x="{ox + k * 7}" y="{oy + 110}" width="{(1, 3, 2, 1, 4, 1, 2)[k % 7]}" height="12" fill="{K["cline"]}"/>'
             for k in range(14)
@@ -246,72 +352,114 @@ def quote_svg():
         f'<text class="a" x="{tailx + 108}" y="{Y2 + 38}">— MIKE TYTHON, PROBABLY</text>'
         f'<g aria-hidden="true">{obj}</g>'
     )
-    return svg(
-        W,
-        H,
-        "The fork is always six months away. Commeths are not. Mike Tython, probably.",
-        style,
-        body,
+    return style + eth_css, body
+
+
+GLITCH_CSS = (
+    ".gl{opacity:0}"
+    "@keyframes gl{0%,93%{opacity:0;transform:none}94%{opacity:1;transform:translateX(3px)}95%{opacity:0}"
+    "96%{opacity:1;transform:translateX(-2px)}97%,100%{opacity:0;transform:none}}"
+    "@media (prefers-reduced-motion:reduce){.gl{animation:none!important}}"
+)
+
+
+def barcode(x0, x1, y, seed, name):
+    """A separator drawn like a block hash: bar widths come from a hash of this run's data,
+    so it changes whenever the numbers do. A few short stretches glitch teal now and then."""
+    digest = hashlib.sha256(seed.encode()).hexdigest()
+    bars, x, k = [], x0, 0
+    while x < x1:
+        n = int(digest[k % 64], 16)
+        w, gap = 1 + n % 4, 2 + (n >> 2)
+        bars.append((x, min(w, x1 - x)))
+        x += w + gap
+        k += 1
+    rect = lambda x, w, fill: (
+        f'<rect x="{x}" y="{y}" width="{w}" height="10" fill="{fill}"/>'
     )
+    out, css = "".join(rect(x, w, K["cline"]) for x, w in bars), ""
+    for g in range(
+        3
+    ):  # three glitch spots; where and how often comes from the hash too,
+        n = int(digest[g * 8 : g * 8 + 8], 16)  # so separators never flicker in sync
+        gx = x0 + n % int(x1 - x0 - 48)
+        run = [(x, w) for x, w in bars if gx <= x < gx + 18 + n % 30]
+        out += (
+            f'<g class="gl {name}{g}">'
+            + "".join(rect(x, w, K["acc"]) for x, w in run)
+            + "</g>"
+        )
+        dur, delay = 5 + (n >> 4) % 40 / 10, (n >> 12) % 70 / 10
+        css += f".{name}{g}{{animation:gl {dur}s {delay}s infinite steps(1,end)}}"
+    return out, css
 
 
-def chain_svg(starts, qlabel, cur, first, weeks, pending, colours, span):
-    """starts: first day of each block (Monday weeks, clipped to the quarter). cur: block holding today.
-    first: first block inside `since`. weeks: per block, section names (one per merged PR).
-    pending: section names of open PRs."""
-    WEEKS = len(starts)
-    B, G, X0, Y0 = 72, 16, 40, 104
-    W = X0 + WEEKS * (B + G) - G + 32
-    H = Y0 + B + 140
-    cx = lambda i: X0 + i * (B + G) + B / 2
+def chain_parts(starts, cur, first, weeks, pending, colours, total):
+    """The chain, in its own units: (style, body, width, height).
+    Every week of the quarter sits on one strip, but only a window of SHOW weeks shows. On each
+    loop the strip rolls from the quarter's first week to the window that holds today, 4th from
+    the left (or last, in the quarter's final weeks), then holds so people can read it."""
+    N = len(starts)
+    lo = max(0, min(cur - (SHOW - 2), N - SHOW))
+    B, G, X0, Y0 = 72, 16, 24, 84
+    WW = SHOW * (B + G) - G  # window width
+    W = X0 + WW + X0
+    sx = lambda i: X0 + i * (B + G)
+    cx = lambda i: sx(i) + B / 2
     clip = lambda x, y, w, h, c=8: (
         f"M{x},{y} H{x + w - c} L{x + w},{y + c} V{y + h} H{x + c} L{x},{y + h - c} Z"
     )
-    out, css = [], []
-    t0 = lambda i: 0.3 + (i - first) * 0.4  # block i starts fading in
-    filled = max(  # when the last tx lands
-        t0(i) + 0.45 + 0.07 * max(min(len(weeks[i]), 12) - 1, 0) + 0.2
-        for i in range(first, cur + 1)
+    mid = Y0 + B / 2
+
+    # timeline (seconds): fade in, roll, arrive, hold for reading, fade out, loop
+    D = min(1.2 + 0.12 * lo, 2.2) if lo else 0
+    TA = 0.5 + D
+    TE = TA + 0.3 + READ
+    CYC = round(TE + 0.4, 2)
+    pct = lambda t: f"{t / CYC * 100:.2f}%"
+    dx = lo * (B + G)
+    css = (
+        f".roll{{animation:roll {CYC}s infinite}} .win{{animation:win {CYC}s infinite}} .ovl{{animation:ovl {CYC}s infinite}}"
+        f"@keyframes roll{{0%,{pct(0.5)}{{transform:translateX(0);animation-timing-function:{EASE}}}{pct(TA)},100%{{transform:translateX(-{dx}px)}}}}"
+        f"@keyframes win{{0%{{opacity:0}}{pct(0.3)},{pct(TE)}{{opacity:1}}100%{{opacity:0}}}}"
+        f"@keyframes ovl{{0%,{pct(TA)}{{opacity:0}}{pct(TA + 0.3)},{pct(TE)}{{opacity:1}}100%{{opacity:0}}}}"
     )
-    CYC = round(filled + HOLD + 0.8, 2)  # then hold for reading, fade out, loop
-    pct = lambda t: f"{t / CYC * 100:.2f}"
-    pop = lambda name, t, fade: css.append(
-        f"@keyframes {name}{{0%,{pct(t)}%{{opacity:0}}{pct(t + fade)}%,{pct(CYC - 0.8)}%{{opacity:1}}100%{{opacity:0}}}}"
-    )
-    anim = lambda name: f'style="animation:{name} {CYC}s ease-out infinite"'
+
+    strip = []  # everything that rolls
     for m in sorted(
         {d.month for d in starts}, key=lambda m: (m - starts[0].month) % 12
     ):
         idx = [i for i, d in enumerate(starts) if d.month == m]
-        a, b = X0 + idx[0] * (B + G), X0 + idx[-1] * (B + G) + B
-        out.append(
-            f'<text class="mo" x="{a}" y="{Y0 - 27}">// {starts[idx[0]].strftime("%b").upper()}</text>'
-            f'<line stroke="{K["line"]}" x1="{a}" y1="{Y0 - 18}" x2="{b}" y2="{Y0 - 18}"/>'
+        a, b = sx(idx[0]), sx(idx[-1]) + B
+        strip.append(
+            f'<text class="mo" x="{a}" y="{Y0 - 24}">// {starts[idx[0]].strftime("%b").upper()}</text>'
+            f'<line stroke="{K["line"]}" x1="{a}" y1="{Y0 - 16}" x2="{b}" y2="{Y0 - 16}"/>'
         )
+    # the chain runs on past both ends of the quarter
+    strip.append(
+        f'<line x1="{sx(0) - G - 40}" y1="{mid}" x2="{sx(0)}" y2="{mid}" stroke="{K["cline"]}" stroke-width="1.5" stroke-dasharray="2 3"/>'
+        f'<line x1="{sx(N - 1) + B}" y1="{mid}" x2="{sx(N - 1) + B + G + 40}" y2="{mid}" stroke="{K["line"]}" stroke-width="1.5" stroke-dasharray="2 3"/>'
+    )
     for i, wk in enumerate(starts):
-        x = X0 + i * (B + G)
+        x = sx(i)
         live = first <= i <= cur
-        lab = f'<text class="lb" x="{cx(i)}" y="{Y0 + B + 22}" opacity="{1 if live else 0.5}">{wk.strftime("%m.%d")}</text>'
-        link = ""
         if i > 0:
             dash = "" if live and i > first else 'stroke-dasharray="2 3"'
-            link = f'<line x1="{x - G}" y1="{Y0 + B / 2}" x2="{x}" y2="{Y0 + B / 2}" stroke="{K["cline"] if live else K["line"]}" stroke-width="1.5" {dash}/>'
+            strip.append(
+                f'<line x1="{x - G}" y1="{mid}" x2="{x}" y2="{mid}" stroke="{K["cline"] if live else K["line"]}" stroke-width="1.5" {dash}/>'
+            )
+        strip.append(
+            f'<text class="lb" x="{cx(i)}" y="{Y0 + B + 20}" opacity="{1 if live else 0.5}">{wk.strftime("%m.%d")}</text>'
+        )
         if not live:  # upcoming, or before `since`
-            out.append(
-                f'{link}<path d="{clip(x + 0.5, Y0 + 0.5, B - 1, B - 1)}" fill="none" stroke="{K["line"]}" stroke-dasharray="2 3"/>{lab}'
+            strip.append(
+                f'<path d="{clip(x + 0.5, Y0 + 0.5, B - 1, B - 1)}" fill="none" stroke="{K["line"]}" stroke-dasharray="2 3"/>'
             )
             continue
         prs = weeks[i]
-        pop(f"b{i}", t0(i), 0.5)
-        focus = (  # the slot being proposed: dashed accent outline that breathes, plus its tag
-            f'<path class="cur" d="{clip(x + 0.5, Y0 + 0.5, B - 1, B - 1)}" fill="none"/>'
-            f'<rect x="{cx(i) - 38}" y="{Y0 + B + 34}" width="6" height="9" fill="{K["acc"]}"/><text class="tag" x="{cx(i) - 28}" y="{Y0 + B + 43}">PROPOSING</text>'
-            if i == cur
-            else ""
-        )
-        out.append(
-            f'<g {anim(f"b{i}")}>{link}<path d="{clip(x + 0.5, Y0 + 0.5, B - 1, B - 1)}" fill="{K["plate"]}" stroke="{K["cline"]}"/>{focus}'
-            f'<text class="n" x="{cx(i)}" y="{Y0 + 28}" style="fill:{K["ink"] if prs else K["line"]}">{len(prs):02d}</text></g>'
+        strip.append(
+            f'<path d="{clip(x + 0.5, Y0 + 0.5, B - 1, B - 1)}" fill="{K["plate"]}" stroke="{K["cline"]}"/>'
+            f'<text class="n" x="{cx(i)}" y="{Y0 + 27}" style="fill:{K["ink"] if prs else K["line"]}">{len(prs):02d}</text>'
         )
         shown = prs[:12]  # the count above stays exact; the block holds at most 3 rows
         Sz, P, cols = 9, 3, 4
@@ -321,80 +469,116 @@ def chain_svg(starts, qlabel, cur, first, weeks, pending, colours, span):
             nr = min(cols, len(shown) - r * cols)
             px = cx(i) - (nr * Sz + (nr - 1) * P) / 2 + c * (Sz + P)
             py = Y0 + B - 11 - Sz - (rows - 1 - r) * (Sz + P)
-            pop(f"t{i}_{j}", t0(i) + 0.45 + j * 0.07, 0.2)
-            out.append(
-                f'<rect x="{px:.1f}" y="{py:.1f}" width="{Sz}" height="{Sz}" fill="{colours[s]}" {anim(f"t{i}_{j}")}/>'
+            strip.append(
+                f'<rect x="{px:.1f}" y="{py:.1f}" width="{Sz}" height="{Sz}" fill="{colours[s]}"/>'
             )
-        out.append(lab)
+
+    # what appears once the strip arrives: focus on today's block, its tag, the mempool
+    xb = X0 + (cur - lo) * (B + G)
+    ovl = [
+        f'<path class="cur" d="{clip(xb + 0.5, Y0 + 0.5, B - 1, B - 1)}" fill="none"/>'
+        f'<rect x="{xb + 2}" y="{Y0 + B + 29}" width="5" height="9" fill="{K["acc"]}"/><text class="tag" x="{xb + 11}" y="{Y0 + B + 38}">PROPOSING</text>'
+    ]
+    if starts[lo].month == starts[lo - 1].month if lo else False:
+        # the window starts mid-month, so that month's label rolled off the left: pin it
+        ovl.append(
+            f'<text class="mo" x="{X0}" y="{Y0 - 24}">// {starts[lo].strftime("%b").upper()}</text>'
+        )
+    ty = Y0 + B + 50
     if pending:
         label = f"MEMPOOL (OPEN PRS) · {len(pending):02d}"
-        shown = pending[:16]
+        shown = pending[:12]
         Sz, P = 9, 4
-        lw = len(label) * 7.7 + 22
-        tw = lw + len(shown) * (Sz + P) + 10
-        xb = X0 + cur * (B + G)
-        tx = min(xb - G, W - 32 - tw)  # under the proposing block
-        ty = Y0 + B + 58
-        # a faint line with pulses flowing from the mempool up the gap into the proposing block
+        lw = len(label) * 8.2 + 18
+        tw = lw + len(shown) * (Sz + P) + 8
+        tx = max(X0, min(xb - G / 2 - 10, X0 + WW - tw))
         flow = f"M{xb - G / 2},{ty} V{Y0 + B - 14} H{xb}"
-        out.append(
-            f"<g {anim(f'b{cur}')}>"
+        ovl.append(
             f'<path d="{flow}" fill="none" stroke="{K["line"]}" stroke-width="1.5"/>'
             f'<path class="flow" d="{flow}" fill="none" stroke="{K["acc"]}" stroke-width="1.5"/>'
-            f'<rect x="{tx + 0.5}" y="{ty + 0.5}" width="{tw - 1}" height="22" fill="none" stroke="{K["cline"]}" stroke-dasharray="3 3"/>'
-            f'<text x="{tx + 12}" y="{ty + 15}" style="fill:{K["muted"]};letter-spacing:.1em">{label}</text>'
+            f'<rect x="{tx + 0.5}" y="{ty + 0.5}" width="{tw - 1}" height="20" fill="none" stroke="{K["cline"]}" stroke-dasharray="3 3"/>'
+            f'<text class="mp" x="{tx + 10}" y="{ty + 14}">{label}</text>'
             + "".join(
-                f'<rect x="{tx + lw + j * (Sz + P) + 0.5}" y="{ty + 7.5}" width="{Sz - 1}" height="{Sz - 1}" fill="none" stroke="{colours[s]}" stroke-width="1.5"/>'
+                f'<rect x="{tx + lw + j * (Sz + P) + 0.5}" y="{ty + 6.5}" width="{Sz - 1}" height="{Sz - 1}" fill="none" stroke="{colours[s]}" stroke-width="1.5"/>'
                 for j, s in enumerate(shown)
             )
-            + "</g>"
         )
-    ly, lx, leg = H - 22, X0, []
+    ly = ty + 20 + 36
+    leg, lx = [], X0
     for name, col in colours.items():
-        sw = f'<rect x="{lx}" y="{ly - 9}" width="9" height="9" fill="{col}"/>'
         leg.append(
-            sw + f'<text class="lg" x="{lx + 16}" y="{ly}">{esc(name.upper())}</text>'
+            f'<rect x="{lx}" y="{ly - 9}" width="9" height="9" fill="{col}"/><text class="lg" x="{lx + 15}" y="{ly}">{esc(name.upper())}</text>'
         )
-        lx += 16 + len(name) * 7.2 + 30
-    total = sum(map(len, weeks))
+        lx += 15 + len(name) * 8 + 26
+    H = ly + 14
     title = f"{total} merged PRs"
     body = (
-        fringe(X0, 48, title, "h")
-        + f'<text class="sub" x="{X0 + len(title) * 18 + 28}" y="47">SLOT {cur + 1:02d}/{WEEKS}</text>'
-        + "".join(out)
-        + f'<line stroke="{K["line"]}" x1="{X0}" y1="{ly - 26}" x2="{W - 32}" y2="{ly - 26}"/>'
+        f'<text class="h" x="{X0}" y="30">{title}</text>'
+        + f'<text class="sub" x="{X0 + len(title) * 9.6 + 18}" y="29">SLOT {cur + 1:02d}/{N}</text>'
+        + f'<clipPath id="win"><rect x="{X0 - G + 2}" y="{Y0 - 40}" width="{WW + 2 * G - 4}" height="{B + 72}"/></clipPath>'
+        + f'<g clip-path="url(#win)"><g class="win"><g class="roll" transform="translate(-{dx},0)">{"".join(strip)}</g></g></g>'
+        + f'<g class="ovl">{"".join(ovl)}</g>'
+        + f'<line stroke="{K["line"]}" x1="{X0}" y1="{ly - 22}" x2="{X0 + WW}" y2="{ly - 22}"/>'
         + "".join(leg)
     )
     style = (
-        f"text{{font-family:{MONO};fill:{K['muted']};font-size:11px}}"
-        f".h{{font-size:30px;font-weight:600;fill:{K['ink']};letter-spacing:-.01em}}"
-        f".sub{{font-size:12px;fill:{K['body']};letter-spacing:.06em}} .mo{{letter-spacing:.1em}}"
-        f".lb{{text-anchor:middle}} .n{{font-size:20px;font-weight:500;text-anchor:middle}} .tag{{fill:{K['acc']};letter-spacing:.1em}} .lg{{letter-spacing:.08em}}"
-        + f".cur{{stroke:{K['acc']};stroke-width:1.5;stroke-dasharray:5 4;animation:pulse 1.6s ease-in-out infinite}}"
-        + "@keyframes pulse{50%{stroke-opacity:.25}}"
-        + ".flow{stroke-dasharray:4 20;stroke-opacity:.7;animation:flow 1.2s linear infinite}"
-        + "@keyframes flow{from{stroke-dashoffset:24}to{stroke-dashoffset:0}}"
-        + "".join(css)
-        + "@media (prefers-reduced-motion:reduce){*{animation:none!important}}"
-        + f".qh{{font-size:40px;font-weight:600;fill:{K['ink']};letter-spacing:.01em}} .qm{{letter-spacing:.12em}}"
-        + f".qr{{font-size:14px;fill:{K['acc']};letter-spacing:.12em;text-anchor:end}}"
+        f".h{{font:600 16px {MONO};fill:{K['ink']};letter-spacing:-.01em}}"
+        f".sub,.mo,.lb,.tag,.lg,.mp{{font-family:{MONO}}}"
+        f".sub{{font-size:9px;fill:{K['body']};letter-spacing:.08em}} .mo{{font-size:11px;fill:{K['muted']};letter-spacing:.1em}}"
+        f".lb{{font-size:12px;fill:{K['muted']};text-anchor:middle}} .n{{font:500 17px {MONO};text-anchor:middle}}"
+        f".tag{{font-size:11px;fill:{K['acc']};letter-spacing:.1em}} .lg{{font-size:11px;fill:{K['muted']};letter-spacing:.08em}}"
+        f".mp{{font-size:11px;fill:{K['muted']};letter-spacing:.08em}}"
+        f".cur{{stroke:{K['acc']};stroke-width:1.5;stroke-dasharray:5 4;animation:pulse 1.6s ease-in-out infinite}}"
+        "@keyframes pulse{50%{stroke-opacity:.25}}"
+        ".flow{stroke-dasharray:4 20;stroke-opacity:.7;animation:flow 1.2s linear infinite}"
+        "@keyframes flow{from{stroke-dashoffset:24}to{stroke-dashoffset:0}}" + css
     )
-    T = 96  # quarter title band on top, the chain below it
-    body = (
-        f'<text class="qm" x="{X0}" y="40">&gt; THIS QUARTER</text>'
-        + fringe(X0, 82, esc(qlabel), "qh")
-        + f'<text class="qr" x="{W - 32}" y="80">{span}</text>'
-        + f'<line stroke="{K["line"]}" x1="{X0}" y1="{T + 4}" x2="{W - 32}" y2="{T + 4}"/>'
-        + f'<g transform="translate(0,{T})">{body}</g>'
+    return style, body, W, H
+
+
+def header_svg(starts, qlabel, span, cur, first, weeks, pending, colours):
+    """Hero quote, then this quarter's chain, as one image, separated by block-hash barcodes."""
+    W, X0 = 760, 52
+    qstyle, qbody = quote_parts()
+    total = sum(map(len, weeks))
+    cstyle, cbody, cw, ch = chain_parts(
+        starts, cur, first, weeks, pending, colours, total
     )
-    H += T
-    return svg(
-        W,
-        H,
-        f"{qlabel}, {span.title()}: {total} merged PRs, slot {cur + 1} of {WEEKS}, {len(pending)} open",
-        style,
-        body,
+    S = (W - 2 * X0) / (
+        cw - 2 * 24
+    )  # the chain's window spans the same width as the quote
+    seed = f"{qlabel}|{total}|{weeks}|{len(pending)}"
+    y = 238
+    sep1, g1 = barcode(X0, W - X0, y, seed, "ga")
+    qy = y + 40
+    band = (
+        f'<text class="qm" x="{X0}" y="{qy}">&gt; THIS QUARTER</text>'
+        + f'<text class="qh" x="{X0}" y="{qy + 36}">{esc(qlabel)}</text>'
+        + f'<text class="qr" x="{W - X0}" y="{qy + 34}">{span}</text>'
     )
+    cy = qy + 56
+    chain = (
+        f'<g transform="translate({X0 - 24 * S:.2f},{cy}) scale({S:.4f})">{cbody}</g>'
+    )
+    by = cy + ch * S + 18
+    sep2, g2 = barcode(X0, W - X0, by, seed + "|end", "gb")
+    H = round(by + 10 + 30)
+    style = (
+        qstyle
+        + cstyle
+        + f".qm{{font:12px {MONO};fill:{K['muted']};letter-spacing:.12em}}"
+        + f".qh{{font:600 30px {MONO};fill:{K['ink']};letter-spacing:.01em}}"
+        + f".qr{{font:14px {MONO};fill:{K['acc']};letter-spacing:.12em;text-anchor:end}}"
+        + GLITCH_CSS
+        + g1
+        + g2
+        + "@media (prefers-reduced-motion:reduce){.roll,.win,.ovl,.cur,.flow{animation:none!important}}"
+    )
+    label = (
+        "The fork is always six months away. Commeths are not. Mike Tython, probably. "
+        f"{qlabel}, {span.title()}: {total} merged PRs, week {cur + 1} of {len(starts)}, {len(pending)} open."
+    )
+    return svg(W, H, label, style, qbody + sep1 + band + chain + sep2)
 
 
 def heading_svg(label, count, index, colour):
@@ -404,11 +588,14 @@ def heading_svg(label, count, index, colour):
         if colour
         else f'<rect x="{X0 + 0.5}" y="22.5" width="13" height="13" fill="none" stroke="{K["cline"]}"/>'
     )
+    bar, bar_css = barcode(
+        X0 + 70 + len(label) * 15, W - 80, 25.5, f"{label}|{count}|{index}", "g"
+    )
     body = (
         sw
         + f'<text class="m" x="{X0 + 26}" y="35">{index:02d}</text>'
-        + fringe(X0 + 56, 39, esc(label), "h")
-        + f'<line x1="{X0 + 70 + len(label) * 15}" y1="30.5" x2="{W - 80}" y2="30.5" stroke="{K["line"]}"/>'
+        + f'<text class="h" x="{X0 + 56}" y="39">{esc(label)}</text>'
+        + bar
         + (
             f'<text class="c" x="{W - 24}" y="38">{count:02d}</text>'
             if count is not None
@@ -418,6 +605,8 @@ def heading_svg(label, count, index, colour):
     style = (
         f".h{{font:600 24px {MONO};fill:{K['ink']};letter-spacing:.02em}} .m{{font:12px {MONO};fill:{K['muted']}}}"
         f".c{{font:500 22px {MONO};fill:{K['acc']};text-anchor:end}}"
+        + GLITCH_CSS
+        + bar_css
     )
     return svg(
         W, H, label if count is None else f"{label}: {count} merged", style, body
@@ -533,23 +722,22 @@ def main():
         open(os.path.join(ASSETS, name), "w").write(text)
         return f"assets/{name}?v={hashlib.sha1(text.encode()).hexdigest()[:8]}"
 
-    write("quote.svg", quote_svg())
-    chain = write(
-        "chain.svg",
-        chain_svg(
+    header = write(
+        "header.svg",
+        header_svg(
             starts,
             qlabel,
+            f"{a:%b %d} — {qe:%b %d}".upper(),
             cur,
             first,
             weeks,
             pend_secs,
             colours,
-            f"{a:%b %d} — {qe:%b %d}".upper(),
         ),
     )
 
     md = [
-        f'<img src="{chain}" alt="{qlabel}: {len(merged)} merged PRs, one block per week" width="100%">',
+        f'<img src="{header}" alt="“The fork ith alwayth thix monthth away. Commeths are not.” — Mike Tython, probably. {qlabel}: {len(merged)} merged PRs" width="100%">',
         "",
     ]
     for n, (sec, repos) in enumerate(sections.items(), 1):
