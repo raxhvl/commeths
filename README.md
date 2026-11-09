@@ -1,5 +1,5 @@
 <!-- commeths:start -->
-<img src="assets/header.svg?v=4428cf90" alt="“The fork ith alwayth thix monthth away. Commeths are not.” — Mike Tython, probably. 2026 Q4: 5 merged PRs" width="100%">
+<img src="assets/header.svg?v=d4998635" alt="“The fork ith alwayth thix monthth away. Commeths are not.” — Mike Tython, probably. 2026 Q4: 5 merged PRs" width="100%">
 
 <img src="assets/h-spec.svg?v=119564aa" alt="Spec · 2 merged" width="100%">
 
@@ -9,7 +9,8 @@
 
 <sub>**Mempool (open PRs)**</sub>
 
-> ○ [✨ feat(engine): Simplify inclusion list type](https://github.com/ethereum/execution-apis/pull/956) <sub>Execution APIs · open 14d</sub>
+> ○ [Update EIP-7976: Update parameter names](https://github.com/ethereum/EIPs/pull/12639) <sub>EIPs · open 0d</sub><br>
+> ○ [✨ feat(engine): Simplify inclusion list type](https://github.com/ethereum/execution-apis/pull/956) <sub>Execution APIs · open 17d</sub>
 
 <img src="assets/h-testing.svg?v=becb630b" alt="Testing · 3 merged" width="100%">
 
@@ -22,15 +23,15 @@
 
 <sub>**Mempool (open PRs)**</sub>
 
-> ○ [✨ feat(test-types): P256 signing utility](https://github.com/ethereum/execution-specs/pull/3961) <sub>Execution Tests · open 0d</sub><br>
-> ○ [✨ feat(tests): EIP-8141 extend secp r coverage](https://github.com/ethereum/execution-specs/pull/3956) <sub>Execution Tests · open 2d</sub><br>
-> ○ [✨ feat(tests): EIP-8141 Extend expiry flag coverage](https://github.com/ethereum/execution-specs/pull/3954) <sub>Execution Tests · open 3d</sub>
+> ○ [✨ feat(test-types): P256 signing utility](https://github.com/ethereum/execution-specs/pull/3961) <sub>Execution Tests · open 3d</sub><br>
+> ○ [✨ feat(tests): EIP-8141 extend secp r coverage](https://github.com/ethereum/execution-specs/pull/3956) <sub>Execution Tests · open 5d</sub><br>
+> ○ [✨ feat(tests): EIP-8141 Extend expiry flag coverage](https://github.com/ethereum/execution-specs/pull/3954) <sub>Execution Tests · open 6d</sub>
 
 <div align="center">
 
 **[All contributions →](https://github.com/search?q=is%3Apr+author%3Araxhvl+repo%3Aethereum%2Fconsensus-specs+repo%3Aethereum%2FEIPs+repo%3Aethereum%2Fexecution-apis+repo%3Aethereum%2Fexecution-specs+repo%3Aethereum%2Fhive+repo%3Aethereum%2Fgo-ethereum+repo%3ANethermindEth%2Fnethermind+repo%3Ahyperledger%2Fbesu+repo%3Aerigontech%2Ferigon+repo%3Aparadigmxyz%2Freth+is%3Amerged&type=pullrequests)**
 
-<sub>Updated 2026-11-06 · counts merged PRs only</sub>
+<sub>Updated 2026-11-09 · counts merged PRs only</sub>
 
 </div>
 <!-- commeths:end -->
