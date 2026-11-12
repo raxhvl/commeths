@@ -1,20 +1,24 @@
 <!-- commeths:start -->
-<img src="assets/header.svg?v=d4998635" alt="“The fork ith alwayth thix monthth away. Commeths are not.” — Mike Tython, probably. 2026 Q4: 5 merged PRs" width="100%">
+<img src="assets/header.svg?v=7bef1e89" alt="“The fork ith alwayth thix monthth away. Commeths are not.” — Mike Tython, probably. 2026 Q4: 8 merged PRs" width="100%">
 
-<img src="assets/h-spec.svg?v=119564aa" alt="Spec · 2 merged" width="100%">
+<img src="assets/h-spec.svg?v=b9cc5d25" alt="Spec · 3 merged" width="100%">
 
 <img src="https://github.com/ethereum.png" width="16"> **[EIPs](https://github.com/ethereum/EIPs)** · 2
 > [Update EIP-8141: Transaction nonce check boundary](https://github.com/ethereum/EIPs/pull/12603) <sub>Nov 1</sub><br>
 > [Update EIP-8141: Move mode section under Frame definition](https://github.com/ethereum/EIPs/pull/12236) <sub>Oct 22</sub>
 
+<img src="https://github.com/ethereum.png" width="16"> **[Execution APIs](https://github.com/ethereum/execution-apis)** · 1
+> [✨ feat(engine): Simplify inclusion list type](https://github.com/ethereum/execution-apis/pull/956) <sub>Nov 9</sub>
+
 <sub>**Mempool (open PRs)**</sub>
 
-> ○ [Update EIP-7976: Update parameter names](https://github.com/ethereum/EIPs/pull/12639) <sub>EIPs · open 0d</sub><br>
-> ○ [✨ feat(engine): Simplify inclusion list type](https://github.com/ethereum/execution-apis/pull/956) <sub>Execution APIs · open 17d</sub>
+> ○ [Update EIP-7976: Update parameter names](https://github.com/ethereum/EIPs/pull/12639) <sub>EIPs · open 3d</sub>
 
-<img src="assets/h-testing.svg?v=becb630b" alt="Testing · 3 merged" width="100%">
+<img src="assets/h-testing.svg?v=db4c0351" alt="Testing · 5 merged" width="100%">
 
-<img src="https://github.com/ethereum.png" width="16"> **[Execution Tests](https://github.com/ethereum/execution-specs)** · 2
+<img src="https://github.com/ethereum.png" width="16"> **[Execution Tests](https://github.com/ethereum/execution-specs)** · 4
+> [✨ feat(tests): EIP-8141 Extend expiry flag coverage](https://github.com/ethereum/execution-specs/pull/3954) <sub>Nov 9</sub><br>
+> [✨ feat(tests): EIP-8141 extend secp r coverage](https://github.com/ethereum/execution-specs/pull/3956) <sub>Nov 9</sub><br>
 > [🧹 chore(tests): Remove duplicate frame tx coverage](https://github.com/ethereum/execution-specs/pull/3946) <sub>Nov 3</sub><br>
 > [✨ feat(tests): Extend focil test coverage](https://github.com/ethereum/execution-specs/pull/3868) <sub>Oct 19</sub>
 
@@ -23,15 +27,13 @@
 
 <sub>**Mempool (open PRs)**</sub>
 
-> ○ [✨ feat(test-types): P256 signing utility](https://github.com/ethereum/execution-specs/pull/3961) <sub>Execution Tests · open 3d</sub><br>
-> ○ [✨ feat(tests): EIP-8141 extend secp r coverage](https://github.com/ethereum/execution-specs/pull/3956) <sub>Execution Tests · open 5d</sub><br>
-> ○ [✨ feat(tests): EIP-8141 Extend expiry flag coverage](https://github.com/ethereum/execution-specs/pull/3954) <sub>Execution Tests · open 6d</sub>
+> ○ [✨ feat(test-types): P256 signing utility](https://github.com/ethereum/execution-specs/pull/3961) <sub>Execution Tests · open 6d</sub>
 
 <div align="center">
 
 **[All contributions →](https://github.com/search?q=is%3Apr+author%3Araxhvl+repo%3Aethereum%2Fconsensus-specs+repo%3Aethereum%2FEIPs+repo%3Aethereum%2Fexecution-apis+repo%3Aethereum%2Fexecution-specs+repo%3Aethereum%2Fhive+repo%3Aethereum%2Fgo-ethereum+repo%3ANethermindEth%2Fnethermind+repo%3Ahyperledger%2Fbesu+repo%3Aerigontech%2Ferigon+repo%3Aparadigmxyz%2Freth+is%3Amerged&type=pullrequests)**
 
-<sub>Updated 2026-11-09 · counts merged PRs only</sub>
+<sub>Updated 2026-11-12 · counts merged PRs only</sub>
 
 </div>
 <!-- commeths:end -->
